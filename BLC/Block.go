@@ -51,7 +51,7 @@ func (block *Block) Serialize() []byte {
 	// 编码（序列化）
 	err := encoder.Encode(block)
 	if  nil != err {
-		log.Panicln("serialize the block to []byte failed %v\n", err)
+		log.Panicf("serialize the block to []byte failed %v\n", err)
 	}
 	return buffer.Bytes()
 }

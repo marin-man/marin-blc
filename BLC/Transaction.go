@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"encoding/hex"
 	"log"
 )
 
@@ -43,19 +44,34 @@ func NewCoinbaseTransaction(address string) *Transaction {
 }
 
 // NewSimpleTransaction 生成普通转账交易
-func NewSimpleTransaction(from string, to string, amount int) *Transaction {
+func NewSimpleTransaction(from string, to string, amount int, bc *BlockChain, txs []*Transaction) *Transaction {
 	var txInputs []*TxInput		// 输入列表
 	var txOutputs []*TxOutput	// 输出列表
-	txInput := &TxInput{ 0, from, []byte("")}
-	txInputs = append(txInputs, txInput)
+	// 调用可花费 UTXO 函数
+	money, spendableUTXODic := bc.FindSpendableUTXO(from, amount, txs)
+	// 输入
+	for txHash, indexArray := range spendableUTXODic {
+		txHashBytes, err := hex.DecodeString(txHash)
+		if nil != err {
+			log.Panicf("decode string to []byte failed! %v\n", err)
+		}
+		// 遍历索引列表
+		for _, index := range indexArray {
+			txInput := &TxInput{index, from, txHashBytes}
+			txInputs = append(txInputs, txInput)
+		}
+	}
 	// 输出（转账源）
 	txOutput := &TxOutput{}
 	txOutputs = append(txOutputs, txOutput)
 	// 找零
-	if amount < 10 {
-		txOutput = &TxOutput{10 - amount, from}
+	if money < amount {
+		txOutput = &TxOutput{money - amount, from}
 		txOutputs = append(txOutputs, txOutput)
+	} else {
+		log.Panicf("余额不足...\n")
 	}
+
 	tx := Transaction{
 		TxHash: nil,
 		Vins: txInputs,
