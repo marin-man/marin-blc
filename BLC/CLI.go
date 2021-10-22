@@ -75,6 +75,10 @@ func (cli *CLI) Run() {
 	// 检测参数数量
 	IsValidArgs()
 	// 新建相关命令
+	// 创建钱包集合
+	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
+	// 获取地址列表
+	getAccountsCmd := flag.NewFlagSet("accounts", flag.ExitOnError)
 	// 添加区块
 	addBlockCmd := flag.NewFlagSet("addblock", flag.ExitOnError)
 	// 输出区块链完整信息
@@ -99,6 +103,14 @@ func (cli *CLI) Run() {
 	flagGetBalanceArg := getbalanceCmd.String("address", "", "要查询的地址")
 	// 判断命令
 	switch os.Args[1] {
+	case "accounts" :
+		if err := getAccountsCmd.Parse(os.Args[2:]); nil != err {
+			log.Panicf("parse cmd get accounts failed! %v\n", err)
+		}
+	case "createwallet" :
+		if err := createWalletCmd.Parse(os.Args[2:]); nil != err {
+			log.Panicf("parse cmd of create wallet failed! %v\n", err)
+		}
 	case "getbalance" :
 		if err := getbalanceCmd.Parse(os.Args[2:]); nil != err {
 			log.Panicf("parse cmd get balance failed %v\n", err)
@@ -106,10 +118,6 @@ func (cli *CLI) Run() {
 	case "send":
 		if err := sendCmd.Parse(os.Args[2:]); nil != err {
 			log.Panicf("parse send failed! %v\n", err)
-		}
-	case "addblock" :
-		if err := addBlockCmd.Parse(os.Args[2:]); nil != err {
-			log.Panicf("parse addBlockCmd failed! %v\n", err)
 		}
 	case "printchain" :
 		if err := printchainCmd.Parse(os.Args[2:]); nil != err {
@@ -125,6 +133,14 @@ func (cli *CLI) Run() {
 		os.Exit(1)
 	}
 
+	// 获取钱包地址列表
+	if getAccountsCmd.Parsed() {
+		cli.GetAccounts()
+	}
+	// 创建钱包集合
+	if createWalletCmd.Parsed() {
+		cli.createWallets()
+	}
 	// 查询余额
 	if getbalanceCmd.Parsed() {
 		if "" == *flagGetBalanceArg {
@@ -157,14 +173,6 @@ func (cli *CLI) Run() {
 		cli.send(JSONToSlice(*flagSendFromArg), JSONToSlice(*flagSendToArg), JSONToSlice(*flagSendAmountArg))
 	}
 
-	// 添加区块命令
-	if addBlockCmd.Parsed() {
-		if *flagAddBlockArg == "" {
-			PrintUsage()
-			os.Exit(1)
-		}
-		cli.addBlock([]*Transaction{})
-	}
 
 	// 输出区块链
 	if printchainCmd.Parsed() {

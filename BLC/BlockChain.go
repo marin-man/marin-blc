@@ -1,6 +1,8 @@
 package BLC
 
 import (
+	"bytes"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"github.com/boltdb/bolt"
@@ -120,12 +122,13 @@ func (bc *BlockChain) PrintChain() {
 				for _, vin := range tx.Vins {
 					fmt.Printf("\t\t\ttvin-txHash: %x\n", vin.TxHash)
 					fmt.Printf("\t\t\ttvin-vout: %x\n", vin.Vout)
-					fmt.Printf("\t\t\ttvin-scriptSig: %x\n", vin.ScriptSig)
+					fmt.Printf("\t\t\ttvin-PublicKey: %x\n", vin.PublicKey)
+					fmt.Printf("\t\t\ttvin-Signature: %x\n", vin.Signature)
 				}
 				fmt.Printf("\t\t输出...\n")
 				for _, vout := range tx.Vouts {
 					fmt.Printf("\t\t\tvout=value:%d\n", vout.Value)
-					fmt.Printf("\t\t\tvout-scriptPubkey:%s\n", vout.ScriptPubkey)
+					fmt.Printf("\t\t\tvout-Ripemd160Hash:%s\n", vout.Ripemd160Hash)
 				}
 			}
 		} else {
@@ -206,7 +209,7 @@ func (bc *BlockChain) UnUTXOs(address string, txs []*Transaction) []*UTXO {
 		if !tx.IsCoinbaseTransaction() {
 			for _, in := range tx.Vins {
 				// 判断用户
-				if in.CheckPubkeyWithAddress(address) {
+				if in.UnLockRipemd160Hash(StringToHash160(address)) {
 					// 添加到已花费输出的 map 中
 					key := hex.EncodeToString(in.TxHash)
 					spendTxOutputs[key] = append(spendTxOutputs[key], in.Vout)
@@ -218,7 +221,7 @@ func (bc *BlockChain) UnUTXOs(address string, txs []*Transaction) []*UTXO {
 	for _, tx := range txs {
 		WorkCacheTx:
 		for index, vout := range tx.Vouts {
-			if vout.CheckPubkeyWithAddress(address) {
+			if vout.UnLockScriptPubkeyWithAddress(address) {
 				if len(spendTxOutputs) != 0 {
 					var isUtxoTx bool   // 判断交易是否被其他交易引用
 					for txHash, indexArray := range spendTxOutputs {
@@ -266,7 +269,7 @@ func (bc *BlockChain) UnUTXOs(address string, txs []*Transaction) []*UTXO {
 			// 跳转
 			work:
 			for index, vout := range tx.Vouts {
-				if vout.CheckPubkeyWithAddress(address) {
+				if vout.UnLockScriptPubkeyWithAddress(address) {
 					// 当前 vout 输入传入地址
 					if len(spendTxOutputs) != 0 {
 						var isSpentOutput bool
@@ -313,7 +316,7 @@ func (bc *BlockChain) SpentOutputs(address string) map[string][]int {
 			// 排除 coinbase 交易
 			if !tx.IsCoinbaseTransaction() {
 				for _, in := range tx.Vins {
-					if in.CheckPubkeyWithAddress(address) {
+					if in.UnLockRipemd160Hash(StringToHash160(address)) {
 						key := hex.EncodeToString(in.TxHash)
 						// 添加到已花费输出的缓存中
 						spentTxOutputs[key] = append(spentTxOutputs[key], in.Vout)
@@ -357,4 +360,42 @@ func (bc *BlockChain) FindSpendableUTXO(from string, amount int, txs []*Transact
 		os.Exit(1)
 	}
 	return value, spendableUTXO
+}
+
+// SignTransaction 交易签名
+func (bc *BlockChain) SignTransaction(tx *Transaction, privateKey ecdsa.PrivateKey) {
+	// coinbase 交易不需要签名
+	if tx.IsCoinbaseTransaction() {
+		return
+	}
+	// 处理交易的 input，查找 tx 所引用的 vout 所属交易(查找发送者)
+	// 对我们所花费的每一笔 UTXO 进行签名
+	// 存储引用的交易
+	prevTxs := make(map[string]Transaction)
+	for _, vin := range tx.Vins {
+		// 查找当前交易所引用的交易
+		tx := bc.FindTransaction(vin.TxHash)
+		prevTxs[hex.EncodeToString(tx.TxHash)] = tx
+	}
+	// 签名
+	tx.Sign(privateKey, prevTxs)
+}
+
+// FindTransaction 通过指定的交易哈希查找交易
+func (bc *BlockChain) FindTransaction(id []byte) Transaction {
+	bcit := bc.Iterator()
+	for {
+		if !bcit.HasNext() {
+			break
+		}
+		block := bcit.Next()
+		for _, tx := range block.Txs {
+			if bytes.Compare(id, tx.TxHash) == 0 {
+				// 找到该交易
+				return *tx
+			}
+		}
+	}
+	fmt.Printf("没找到交易[%x]\n", id)
+	return Transaction{}
 }
