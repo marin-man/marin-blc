@@ -48,13 +48,14 @@ func NewCoinbaseTransaction(address string) *Transaction {
 }
 
 // NewSimpleTransaction 生成普通转账交易
-func NewSimpleTransaction(from string, to string, amount int, bc *BlockChain, txs []*Transaction) *Transaction {
+func NewSimpleTransaction(from string, to string, amount int, bc *BlockChain,
+	txs []*Transaction, nodeId string) *Transaction {
 	var txInputs []*TxInput		// 输入列表
 	var txOutputs []*TxOutput	// 输出列表
 	// 调用可花费 UTXO 函数
 	money, spendableUTXODic := bc.FindSpendableUTXO(from, amount, txs)
 	// 获取钱包集合对象
-	wallets := NewWallets()
+	wallets := NewWallets(nodeId)
 	wallet := wallets.Wallets[from]
 	// 输入
 	for txHash, indexArray := range spendableUTXODic {

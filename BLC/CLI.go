@@ -41,10 +41,13 @@ func PrintUsage()  {
 	fmt.Printf("\t\t\tbalance -- 查找所有 UTXO\n")
 	fmt.Printf("\tset_id -port PORT -- 设置节点号\n")
 	fmt.Printf("\t\tPORT -- 访问的节点号")
+	fmt.Printf("\tstart -- 启动节点服务")
 }
 
 // dbExit 判断数据库文件是否存在
-func dbExit() bool {
+func dbExit(nodeId string) bool {
+	// 生成不同节点的数据库文件
+	dbName := fmt.Sprintf(dbName, nodeId)
 	if _, err := os.Stat(dbName); os.IsNotExist(err) {
 		// 数据库文件不存在
 		return false
@@ -53,8 +56,9 @@ func dbExit() bool {
 }
 
 // BlockchainObject 获取一个 blockchain 对象
-func BlockchainObject() *BlockChain {
+func BlockchainObject(nodeId string) *BlockChain {
 	// 获取 DB
+	dbName := fmt.Sprintf(dbName, nodeId)
 	db, err := bolt.Open(dbName, 0600, nil)
 	if nil != err {
 		log.Panicf("open the db [%s] failed! %v\n", dbName, err)
@@ -79,6 +83,7 @@ func BlockchainObject() *BlockChain {
 
 // Run 命令行运行函数
 func (cli *CLI) Run() {
+	nodeId := GetEnvNodeId()
 	// 检测参数数量
 	IsValidArgs()
 	// 新建相关命令
@@ -100,6 +105,8 @@ func (cli *CLI) Run() {
 	UTXOTestCmd := flag.NewFlagSet("utxo", flag.ExitOnError)
 	// 节点号设置命令
 	setNodeIdCmd := flag.NewFlagSet("set_id", flag.ExitOnError)
+	// 节点服务启动命令
+	startNodeCmd := flag.NewFlagSet("start", flag.ExitOnError)
 
 	// 数据参数处理
 	// 添加区块
@@ -120,6 +127,10 @@ func (cli *CLI) Run() {
 
 	// 判断命令
 	switch os.Args[1] {
+	case "start" :
+		if err := startNodeCmd.Parse(os.Args[2:]); nil != err {
+			log.Panicf("parse cmd start node server failed! %v\n", err)
+		}
 	case "set_id" :
 		if err := setNodeIdCmd.Parse(os.Args[2:]); nil != err {
 			log.Panicf("parse cmd set node id failed! %v\n", err)
@@ -158,6 +169,11 @@ func (cli *CLI) Run() {
 		os.Exit(1)
 	}
 
+	// 节点启动服务
+	if startNodeCmd.Parsed() {
+		cli.startNode(nodeId)
+	}
+
 	// 节点 ID 设置
 	if setNodeIdCmd.Parsed() {
 		if *flagPortArg == "" {
@@ -170,30 +186,31 @@ func (cli *CLI) Run() {
 	if UTXOTestCmd.Parsed() {
 		switch *flagUTXOArg {
 		case "balance":
-			cli.TestResetUTXO()
+			cli.TestFindUTXOMap()
 		case "reset":
-			cli.TestResetUTXO()
-		default:
-
+			cli.TestResetUTXO(nodeId)
 		}
 	}
 
 	// 获取钱包地址列表
 	if getAccountsCmd.Parsed() {
-		cli.GetAccounts()
+		cli.GetAccounts(nodeId)
 	}
+
 	// 创建钱包集合
 	if createWalletCmd.Parsed() {
-		cli.createWallets()
+		cli.createWallets(nodeId)
 	}
+
 	// 查询余额
 	if getbalanceCmd.Parsed() {
 		if "" == *flagGetBalanceArg {
 			fmt.Println("请输入查询地址...")
 			os.Exit(1)
 		}
-		cli.getBalance(*flagGetBalanceArg)
+		cli.getBalance(*flagGetBalanceArg, nodeId)
 	}
+
 	// 发起转账
 	if sendCmd.Parsed() {
 		if *flagSendFromArg == "" {
@@ -215,13 +232,12 @@ func (cli *CLI) Run() {
 		fmt.Printf("\tFROM:[%s]\n", JSONToSlice(*flagSendFromArg))
 		fmt.Printf("\tTO:[%s]\n", JSONToSlice(*flagSendToArg))
 		fmt.Printf("\tAMOUNT:[%s]\n", JSONToSlice(*flagSendAmountArg))
-		cli.send(JSONToSlice(*flagSendFromArg), JSONToSlice(*flagSendToArg), JSONToSlice(*flagSendAmountArg))
+		cli.send(JSONToSlice(*flagSendFromArg), JSONToSlice(*flagSendToArg), JSONToSlice(*flagSendAmountArg), nodeId)
 	}
-
 
 	// 输出区块链
 	if printchainCmd.Parsed() {
-		cli.printChain()
+		cli.printChain(nodeId)
 	}
 	// 创建区块链
 	if createBLCWithGenesisBlockCmd.Parsed() {
@@ -229,6 +245,6 @@ func (cli *CLI) Run() {
 			PrintUsage()
 			os.Exit(1)
 		}
-		cli.createBlockchain(*flagAddBlockArg)
+		cli.createBlockchain(*flagAddBlockArg, nodeId)
 	}
 }
