@@ -3,11 +3,14 @@ package BLC
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
 	"log"
+	"math/big"
+	"time"
 )
 
 // 交易管理文件
@@ -88,7 +91,7 @@ func NewSimpleTransaction(from string, to string, amount int, bc *BlockChain, tx
 	return &tx
 }
 
-// HashTransaction 生成交易哈希（交易序列化）
+// HashTransaction 生成交易哈希（交易序列化），不同时间生成的交易哈希值不同
 func (tx *Transaction) HashTransaction() {
 	var result bytes.Buffer
 	// 设置编码对象
@@ -96,9 +99,12 @@ func (tx *Transaction) HashTransaction() {
 	if err := encoder.Encode(tx); err != nil {
 		log.Panicf("tx Hash encoded failed %v\n", err)
 	}
-
+	// 添加时间戳标识，不添加会导致所有的 coinbase 交易哈希完全相同
+	tm := time.Now().UnixNano()
+	// 用于生成哈希的原数据
+	txHashBytes := bytes.Join([][]byte{result.Bytes(), IntToHex(tm)}, []byte{})
 	// 生成哈希值
-	hash := sha256.Sum256(result.Bytes())
+	hash := sha256.Sum256(txHashBytes)
 	tx.TxHash = hash[:]
 }
 
@@ -180,4 +186,45 @@ func (tx *Transaction) Hash() []byte {
 	txCopy.TxHash = []byte{}
 	hash := sha256.Sum256(tx.Serialize())
 	return hash[:]
+}
+
+// Verity 验证签名
+func (tx *Transaction) Verity(prevTxs map[string]Transaction) bool {
+	// 检查能否找到交易哈希
+	for _, vin := range tx.Vins {
+		if prevTxs[hex.EncodeToString(vin.TxHash)].TxHash == nil {
+			log.Panicf("VERIFY ERROR : transaction verity failed!\n")
+		}
+	}
+	// 提取相同的交易签名属性
+	txCopy := tx.TrimmedCopy()
+	// 使用相同的椭圆
+	curve := elliptic.P256()
+	// 遍历 tx 输入，对每笔输入所引用的输出进行校验
+	for vinId, vin := range tx.Vins {
+		// 获取关联交易
+		prevTx := prevTxs[hex.EncodeToString(vin.TxHash)]
+		// 找到发送者（当前输入引用的哈希——输出的哈希）
+		txCopy.Vins[vinId].PublicKey = prevTx.Vouts[vin.Vout].Ripemd160Hash
+		// 由需要验证的数据生成的交易哈希，必须要与签名时的数据完全一致
+		txCopy.TxHash = txCopy.Hash()
+		// 在比特币中，签名是一个数值对，r、s 代表签名
+		// 获取 r、s，两者长度相等，要从输入的 signature 中获取
+		r, s := big.Int{}, big.Int{}
+		sigLen := len(vin.Signature)
+		r.SetBytes(vin.Signature[:(sigLen/2)])
+		s.SetBytes(vin.Signature[(sigLen/2):])
+		// 获取公钥，由 x，y 坐标组成
+		x, y := big.Int{}, big.Int{}
+		pubKeyLen := len(vin.PublicKey)
+		x.SetBytes(vin.PublicKey[:(pubKeyLen/2)])
+		y.SetBytes(vin.PublicKey[(pubKeyLen/2):])
+		rawPublicKey := ecdsa.PublicKey{curve, &x, &y}
+		// 调用验证签名核心函数
+		if !ecdsa.Verify(&rawPublicKey, txCopy.TxHash, &r, &s) {
+			return false
+		}
+
+	}
+	return true
 }

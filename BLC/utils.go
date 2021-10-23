@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 )
@@ -43,4 +44,14 @@ func Reverse(data []byte)  {
 	for i, j := 0, len(data) - 1; i < j; i, j = i + 1, j - 1 {
 		data[i], data[j] = data[j], data[i]
 	}
+}
+
+// GetEnvNodeId 获取节点 ID
+func GetEnvNodeId() string {
+	nodeID := os.Getenv("NODE_ID")
+	if nodeID == "" {
+		fmt.Println("NODE_ID is not set...")
+		os.Exit(1)
+	}
+	return nodeID
 }

@@ -8,6 +8,7 @@ func (cli *CLI) getBalance(from string) {
 	// 获取区块链对象
 	blockchain := BlockchainObject()
 	defer blockchain.DB.Close()   // 关闭实例对象
-	amount := blockchain.getBalance(from)
+	utxoSet := UTXOSet{Blockchain: blockchain}
+	amount := utxoSet.GetBalance(from)
 	fmt.Printf("\t地址 [%s] 的余额：[%d]\n", from, amount)
 }

@@ -34,6 +34,13 @@ func PrintUsage()  {
 	fmt.Printf("\tgetbalance -address FROM -- 查询指定地址的余额\n")
 	fmt.Println("\t查询余额参数说明")
 	fmt.Printf("\t\t-address -- 查询余额的地址")
+	fmt.Printf("\taccounts -- 获取钱包地址列表\n")
+	fmt.Printf("\tutxo -method METHOD -- 测试UTXO Table 功能中指定的方法\n")
+	fmt.Printf("\t\tMETHOD -- 方法名\n")
+	fmt.Printf("\t\t\treset -- 重置 UTXOtable\n")
+	fmt.Printf("\t\t\tbalance -- 查找所有 UTXO\n")
+	fmt.Printf("\tset_id -port PORT -- 设置节点号\n")
+	fmt.Printf("\t\tPORT -- 访问的节点号")
 }
 
 // dbExit 判断数据库文件是否存在
@@ -75,10 +82,6 @@ func (cli *CLI) Run() {
 	// 检测参数数量
 	IsValidArgs()
 	// 新建相关命令
-	// 创建钱包集合
-	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
-	// 获取地址列表
-	getAccountsCmd := flag.NewFlagSet("accounts", flag.ExitOnError)
 	// 添加区块
 	addBlockCmd := flag.NewFlagSet("addblock", flag.ExitOnError)
 	// 输出区块链完整信息
@@ -89,6 +92,15 @@ func (cli *CLI) Run() {
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	// 查询余额
 	getbalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
+	// 创建钱包集合
+	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
+	// 获取地址列表
+	getAccountsCmd := flag.NewFlagSet("accounts", flag.ExitOnError)
+	// utxo 测试命令
+	UTXOTestCmd := flag.NewFlagSet("utxo", flag.ExitOnError)
+	// 节点号设置命令
+	setNodeIdCmd := flag.NewFlagSet("set_id", flag.ExitOnError)
+
 	// 数据参数处理
 	// 添加区块
 	flagAddBlockArg := addBlockCmd.String("data", "sent 100 btc to player", "添加区块数据")
@@ -101,8 +113,21 @@ func (cli *CLI) Run() {
 	flagSendAmountArg := sendCmd.String("amount", "", "转账金额")
 	// 查询余额命令行参数
 	flagGetBalanceArg := getbalanceCmd.String("address", "", "要查询的地址")
+	// UTXO 测试命令行参数
+	flagUTXOArg := UTXOTestCmd.String("method", "", "UTXO Table 相关操作")
+	// 端口号参数
+	flagPortArg := setNodeIdCmd.String("port", "", "设置节点 ID")
+
 	// 判断命令
 	switch os.Args[1] {
+	case "set_id" :
+		if err := setNodeIdCmd.Parse(os.Args[2:]); nil != err {
+			log.Panicf("parse cmd set node id failed! %v\n", err)
+		}
+	case "utxo" :
+		if err :=UTXOTestCmd.Parse(os.Args[2:]); nil != err {
+			log.Panicf("parse cmd operate utxo table failed!%v\n", err)
+		}
 	case "accounts" :
 		if err := getAccountsCmd.Parse(os.Args[2:]); nil != err {
 			log.Panicf("parse cmd get accounts failed! %v\n", err)
@@ -131,6 +156,26 @@ func (cli *CLI) Run() {
 		// 没有传递任何命令或者传递命令不在上面的命令列表当中
 		PrintUsage()
 		os.Exit(1)
+	}
+
+	// 节点 ID 设置
+	if setNodeIdCmd.Parsed() {
+		if *flagPortArg == "" {
+			fmt.Println("请输入端口号...")
+			os.Exit(1)
+		}
+		cli.SetNodeId(*flagPortArg)
+	}
+	// utxo table 操作
+	if UTXOTestCmd.Parsed() {
+		switch *flagUTXOArg {
+		case "balance":
+			cli.TestResetUTXO()
+		case "reset":
+			cli.TestResetUTXO()
+		default:
+
+		}
 	}
 
 	// 获取钱包地址列表

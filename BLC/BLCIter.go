@@ -6,6 +6,7 @@ import (
 )
 
 // 区块链迭代器管理文件
+var hasNext = true
 
 // BlockChainIterator 迭代器基本结构
 type BlockChainIterator struct {
@@ -37,26 +38,15 @@ func (bcit *BlockChainIterator) Next() *Block {
 	if nil != err {
 		log.Panicf("iterator the db failed %v\n", err)
 	}
+	if nil != block.PrevBlockHash {
+		hasNext = true
+	} else {
+		hasNext = false
+	}
 	return block
 }
 
 // HasNext 查询是否有下一个值
 func (bcit *BlockChainIterator) HasNext() bool {
-	var block *Block
-	var hasNext bool = true
-	err := bcit.DB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blockTableName))
-		if nil != b {
-			currentBlockBytes := b.Get(bcit.CurrentHash)
-			block = Deserialize(currentBlockBytes)
-			if nil == block.PrevBlockHash {
-				hasNext = false
-			}
-		}
-		return nil
-	})
-	if nil != err {
-		log.Panicf("iterator the db failed %v\n", err)
-	}
 	return hasNext
 }

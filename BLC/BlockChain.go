@@ -149,6 +149,9 @@ func (bc *BlockChain) MineNewBlock(from, to, amount []string) {
 		tx := NewSimpleTransaction(address, to[index], value, bc, txs)
 		// 追加到 txs 链表中
 		txs = append(txs, tx)
+		// 给与交易发起者（矿工）一定的奖励
+		tx = NewCoinbaseTransaction(address)
+		txs = append(txs,tx)
 	}
 
 	// 从数据库中获取最新一个区块
@@ -164,6 +167,14 @@ func (bc *BlockChain) MineNewBlock(from, to, amount []string) {
 		}
 		return nil
 	})
+	// 在此处进行交易签名的验证，对 txs 中的每一笔交易都进行验证
+	for _, tx := range txs {
+		// 验证签名，只要有一笔交易的签名验证失败，panic
+		if !bc.VerityTransaction(tx) {
+			log.Panicf("ERROR: tx [%x] verity failed!\n", tx)
+		}
+	}
+
 	// 通过已拿到的区块生成新的区块
 	block = NewBlock(block.Height+1, block.Hash, txs)
 	// 持久化新生成的区块到数据库中
@@ -398,4 +409,89 @@ func (bc *BlockChain) FindTransaction(id []byte) Transaction {
 	}
 	fmt.Printf("没找到交易[%x]\n", id)
 	return Transaction{}
+}
+
+// VerityTransaction 验证签名
+func (bc *BlockChain) VerityTransaction(tx *Transaction) bool {
+	if tx.IsCoinbaseTransaction() {
+		return true
+	}
+	prevTxs := make(map[string]Transaction)
+	// 查找输入引用的交易
+	for _, vin := range tx.Vins {
+		tx := bc.FindTransaction(vin.TxHash)
+		prevTxs[hex.EncodeToString(tx.TxHash)] = tx
+	}
+	return tx.Verity(prevTxs)
+}
+
+// FindUTXOMap 查找整条区块链中所有地址的 UTXO
+func (bc *BlockChain) FindUTXOMap() map[string]*TXOutputs {
+	// 遍历区块链
+	bcit := bc.Iterator()
+	// 输出集合
+	utxoMaps := make(map[string]*TXOutputs)
+	// 查找已花费输出
+	spentTxOutputs := bc.FindAllSpentOutputs()
+	for {
+		if !bcit.HasNext() {
+			break
+		}
+		block := bcit.Next()
+		for _, tx := range block.Txs {
+			txOutputs := &TXOutputs{[]*TxOutput{}}
+			txHash := hex.EncodeToString(tx.TxHash)
+			// 获取每笔交易的 vouts
+			WorkOutLoop:
+			for index, vout := range tx.Vouts {
+				// 获取治党交易的输入
+				txInputs := spentTxOutputs[txHash]
+				if len(txInputs) > 0 {
+					isSpent := false
+					for _, in := range txInputs {
+						// 查找指定输出的所有者
+						outPubKey := vout.Ripemd160Hash
+						inPubKey := in.PublicKey
+						if bytes.Compare(outPubKey, Ripemd160Hash(inPubKey)) == 0 {
+							if index == in.Vout {
+								isSpent = true
+								continue WorkOutLoop
+							}
+						}
+					}
+					if !isSpent {
+						// 当前输出没有被包含到 txInputs 中
+						txOutputs.TXOutputs = append(txOutputs.TXOutputs, vout)
+					}
+				} else {
+					// 没有 input 引用该交易的输出，则代表当前交易中所有的输出都是 UTXO
+					txOutputs.TXOutputs = append(txOutputs.TXOutputs, vout)
+				}
+			}
+			utxoMaps[txHash] = txOutputs
+		}
+	}
+	return utxoMaps
+}
+
+// FindAllSpentOutputs 查找整体区块链所有已花费输出
+func (bc *BlockChain) FindAllSpentOutputs() map[string][]*TxInput {
+	bcit := bc.Iterator()
+	spentTxOutputs := make(map[string][]*TxInput)
+	// 存储已花费输出
+	for {
+		if !bcit.HasNext() {
+			break
+		}
+		block := bcit.Next()
+		for _, tx := range block.Txs {
+			if !tx.IsCoinbaseTransaction() {
+				for _, txInput := range tx.Vins {
+					txHash := hex.EncodeToString(txInput.TxHash)
+					spentTxOutputs[txHash] = append(spentTxOutputs[txHash], txInput)
+				}
+			}
+		}
+	}
+	return spentTxOutputs
 }

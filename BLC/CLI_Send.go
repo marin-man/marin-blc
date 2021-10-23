@@ -18,5 +18,9 @@ func (cli *CLI) send(from, to, amount []string)  {
 		fmt.Println("交易参数输入有误，请检查一致性...")
 		os.Exit(1)
 	}
+	// 发起交易，生成新的区块
 	blockchain.MineNewBlock(from, to, amount)
+	// 调用 utxo table 的函数，更新 utxo table
+	utxoSet := &UTXOSet{Blockchain: blockchain}
+	utxoSet.update()
 }

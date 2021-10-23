@@ -2,7 +2,6 @@ package BLC
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/gob"
 	"log"
 	"time"
@@ -68,13 +67,14 @@ func Deserialize(blockBytes []byte) *Block {
 	return &block
 }
 
-// HashTransaction 把指定区块中所有交易结构都序列化（类 Merkle 数的哈希计算方法）
+// HashTransaction 把指定区块中所有交易结构都序列化
 func (block *Block) HashTransaction() []byte {
 	var txHashes [][]byte
 	// 将指定区块中所有交易哈希进行拼接
 	for _, tx := range block.Txs {
 		txHashes = append(txHashes, tx.TxHash)
 	}
-	txHash := sha256.Sum256(bytes.Join(txHashes, []byte{}))
-	return txHash[:]
+	// 将交易数据存入 Merkle 树中，然后生成 Merkle 根节点
+	mTree := NewMerkleTree(txHashes)
+	return mTree.RootNode.Data
 }
