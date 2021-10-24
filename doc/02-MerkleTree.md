@@ -1,3 +1,6 @@
+默克尔树是一个二叉树，由一组 hash 后形成的数值节点组成，其叶子节点存放基础数据，从根节点开始每个节点都是由其左右子节点联合在一起计算 hash 得到的。这样的数据结构有两种好处：第一是任意节点的变化都会导致整颗树的变化，而是该树任一部分子树都可以作为一个小型子树进行传递和使用。
+
+```go
 package BLC
 
 import "crypto/sha256"
@@ -69,3 +72,4 @@ func NewMerkleNode(left, right *MerkleNode, data []byte) *MerkleNode {
 	node.Right = right
 	return node
 }
+```
