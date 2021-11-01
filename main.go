@@ -1,8 +1,10 @@
 package main
 
-import "bkc/BLC"
+import (
+	"bkc/cmd"
+)
 
 func main() {
-	cli := BLC.CLI{}
+	cli := cmd.CLI{}
 	cli.Run()
 }
